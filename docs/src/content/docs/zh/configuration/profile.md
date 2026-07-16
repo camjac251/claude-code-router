@@ -57,7 +57,7 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 | 环境变量 | 注入启动进程。受管模式还会写入受管设置文件；复用模式不会把这些变量写入所选现有设置文件。 |
 | Bot | 只在 Claude App 入口生效，可选择已保存 Bot，并配置转发 Agent 消息或接力。 |
 
-选择 **复用现有 Claude 配置** 后，CCR 会把所选设置文件所在目录设为 `CLAUDE_CONFIG_DIR`。启动的 CLI 可以使用该目录中的现有插件、Hooks、状态栏、Skills、Agents 和会话。网关地址、配置专属鉴权、模型和环境变量只注入此次启动，普通 `claude` 命令不受影响。CLI 本身仍共享该配置目录，因此它在目录中产生的修改也会保留。
+选择 **复用现有 Claude 配置** 后，如果使用原生默认文件 `~/.claude/settings.json`，CCR 会保持 `CLAUDE_CONFIG_DIR` 未设置，使 CLI 沿用普通启动时的账号、项目、插件、Hooks、状态栏、Skills、Agents 和会话路径。自定义设置文件也必须命名为 `settings.json`，CCR 会把该文件的父目录设为 `CLAUDE_CONFIG_DIR`。网关地址、配置专属鉴权、模型和环境变量只注入此次启动，普通 `claude` 命令不受影响。CLI 本身仍共享该配置，因此它产生的修改也会保留。
 
 复用模式会拒绝位于 CCR 受管 `profiles` 目录中的设置文件。请选用该目录之外、由用户维护的设置文件，以避免受管路由字段与继承配置发生冲突。
 
