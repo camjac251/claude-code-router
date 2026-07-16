@@ -9,12 +9,12 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 
 1. 先在 **供应商配置** 中添加至少一个可用供应商和模型，或先创建需要使用的 Fusion 模型。
 2. 打开 **Agent配置**，点击 **添加配置**。
-3. 选择 Agent 类型，填写配置名称，并选择作用范围和入口模式。
+3. 选择 Agent 类型，填写配置名称，并选择作用范围、入口模式和可用的配置模式。
 4. 选择模型。模型值通常是 `供应商名称/模型名称`，也可以选择 Fusion 模型。
 5. 如果入口模式包含 App，可以绑定 Bot，并选择是否转发 Agent 消息或开启接力。
 6. 保存后，从 Agent配置卡片打开：终端图标会复制 CLI 命令，播放图标会启动 App 实例。
 
-试用阶段建议选择 **仅从 CCR 打开时生效**，并且总是从 CCR 打开 Agent。这样配置只影响 CCR 启动的实例，不会改掉你系统里原本直接打开的 Claude Code、Codex、Grok CLI 或 ZCode。
+试用阶段建议选择 **仅从 CCR 打开时生效**，并且总是从 CCR 打开 Agent。Claude Code 默认保持 **CCR 隔离配置**；只有明确希望 CCR 启动的 CLI 共享现有配置目录时，才选择 **复用现有 Claude 配置**。
 
 ## 多开机制
 
@@ -22,7 +22,8 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 
 | 机制 | 实际行为 |
 | --- | --- |
-| 独立配置文件 | 选择“仅从 CCR 打开时生效”时，Claude Code 和 Codex 会写入 CCR 管理的独立配置目录，路径按配置 `id` 区分 |
+| 独立配置文件 | 选择“仅从 CCR 打开时生效”时，Claude Code 和 Codex 默认写入 CCR 管理的独立配置目录，路径按配置 `id` 区分 |
+| 现有 Claude 配置 | 仅 CLI 的 Claude Code 配置也可以复用现有配置目录，同时让 CCR 路由只影响此次启动 |
 | 独立启动器 | Claude Code 和 Grok CLI 使用独立启动包装器，Codex 和 ZCode 使用独立中间层启动器，文件名同样按配置 `id` 或名称区分 |
 | 独立 App 数据目录 | 从 App 打开时，Claude App、ChatGPT（Codex 桌面端的新名称）、ZCode App 都会使用按配置 `id` 区分的用户数据目录 |
 | 运行状态 | CCR 按打开入口和配置 `id` 记录运行中的 App 实例；同一个配置再次打开会激活已有窗口，不同配置可以打开不同实例 |
@@ -36,8 +37,9 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 | Agent | 全部 | 选择 Claude Code、Codex、OpenCode、Grok CLI 或 ZCode。Grok CLI 只支持 CLI，ZCode 只支持 App。 |
 | 配置名称 | 全部 | 用于在 CCR 中识别配置，也会作为 `ccr-app <配置名称>` 的打开目标。名称可以有空格，复制命令时 CCR 会自动加引号。 |
 | 启用开关 | 全部 | 关闭后该配置不会出现在打开入口中，也不会被应用为有效启动配置。 |
-| 作用范围 | 全部 | **仅从 CCR 打开时生效** 会使用 CCR 管理的独立配置；**系统默认** 会写入对应 Agent 的默认配置。同一个 Agent 同时只能有一个启用的系统默认配置。 |
+| 作用范围 | 全部 | **仅从 CCR 打开时生效** 使用配置专属启动器，并默认使用 CCR 管理的隔离配置；**系统默认** 会写入对应 Agent 的默认配置。同一个 Agent 同时只能有一个启用的系统默认配置。 |
 | 入口模式 | Claude Code、Codex、OpenCode、Grok CLI | `CLI & APP` 同时显示 CLI 和 App 打开入口；`CLI only` 只生成 CLI 命令；`App only` 只显示 App 打开入口。Grok CLI 固定为 `CLI only`。 |
+| Claude 配置 | Claude Code CLI | 默认使用 **CCR 隔离配置**。只有 **仅从 CCR 打开时生效** 且为 `CLI only` 时，才可选择 **复用现有 Claude 配置**。 |
 | 模型 | 全部 | 该 Agent 打开后的默认模型，可以选择普通供应商模型或 Fusion 模型。Claude Code 留空表示保留 Claude Code 默认模型。 |
 | Bot | App 入口 | 只有从 CCR 打开的 App 模式会转发 Bot 消息。CLI 当前不转发 Bot 消息。 |
 | 环境变量 | 全部 | 为该配置注入额外环境变量。Claude Code 默认带 `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`，用于启用网关模型发现。 |
@@ -50,9 +52,16 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 | --- | --- |
 | 模型覆盖 | 写入 Claude Code 使用的 `ANTHROPIC_MODEL`。留空时不覆盖 Claude Code 自己的默认模型。 |
 | 小模型 | 写入 `ANTHROPIC_SMALL_FAST_MODEL`，供 Claude Code 的轻量任务使用。留空时保留 Claude Code 默认值。 |
-| 设置文件 | 系统默认模式使用 Claude Code 默认设置文件；仅从 CCR 打开时生效会在 CCR 配置目录下按 Agent配置 `id` 生成独立设置文件。 |
-| 环境变量 | 会合并到 Claude Code 设置文件的 `env` 中。CCR 同时写入网关地址、API Key helper 和启动包装器。 |
+| Claude 配置 | 隔离模式创建由 CCR 管理的配置；复用模式让 CLI 启动使用所选现有设置文件所在的目录。 |
+| 设置文件 | 系统默认模式使用 Claude Code 默认设置文件。CCR 隔离模式会在 CCR 配置目录下按 Agent配置 `id` 生成设置文件。复用模式只把所选文件用作目录定位，正常应用时不会读取或修改该文件。 |
+| 环境变量 | 注入启动进程。受管模式还会写入受管设置文件；复用模式不会把这些变量写入所选现有设置文件。 |
 | Bot | 只在 Claude App 入口生效，可选择已保存 Bot，并配置转发 Agent 消息或接力。 |
+
+选择 **复用现有 Claude 配置** 后，CCR 会把所选设置文件所在目录设为 `CLAUDE_CONFIG_DIR`。启动的 CLI 可以使用该目录中的现有插件、Hooks、状态栏、Skills、Agents 和会话。网关地址、配置专属鉴权、模型和环境变量只注入此次启动，普通 `claude` 命令不受影响。CLI 本身仍共享该配置目录，因此它在目录中产生的修改也会保留。
+
+复用模式会拒绝位于 CCR 受管 `profiles` 目录中的设置文件。请选用该目录之外、由用户维护的设置文件，以避免受管路由字段与继承配置发生冲突。
+
+从正在生效的 **系统默认** 配置直接切换到复用模式时，CCR 会先从自己持有的备份恢复原设置。如果无法完成恢复，复用模式会安全失败，并且不会生成启动包装器或鉴权 helper。复用模式仅支持 **仅从 CCR 打开时生效** 和 `CLI only`；其他作用范围或入口组合会使用隔离配置。
 
 Claude Code CLI 从 CCR 打开后，会通过 CCR 网关获取模型发现信息。进入 Claude Code CLI 后可以输入 `/model` 查看并切换 CCR 暴露的模型列表，包括普通供应商模型和可见的 Fusion 模型。
 
@@ -127,7 +136,7 @@ ZCode 只支持 App 打开，因此入口模式固定为 `App only`，也不会�
 
 ### Claude Code
 
-Claude Code CLI 配置会写入设置文件。选择“仅从 CCR 打开时生效”时，CCR 会在自己的配置目录下为这个 Agent配置生成独立设置文件，并通过独立启动包装器打开 Claude Code。
+选择“仅从 CCR 打开时生效”时，Claude Code 默认使用配置专属的隔离设置文件。也可以为 `CLI only` 配置选择复用现有配置目录。两种模式都通过 CCR 启动包装器打开；复用模式只把路由、鉴权和模型覆盖注入此次启动。
 
 从桌面 App 打开 Claude App 时，CCR 还会为该配置准备独立用户数据目录。不同 Agent配置使用不同目录，因此可以同时打开多个 Claude App 实例。
 
@@ -160,6 +169,6 @@ ZCode 只支持 App 打开。CCR 会根据 ZCode home 或自定义配置文件�
 ## 多开建议
 
 1. 为每个需要独立运行的 Agent 实例创建一个 Agent配置。
-2. 试用阶段优先选择“仅从 CCR 打开时生效”，避免影响系统默认 Agent。
+2. 试用阶段优先选择“仅从 CCR 打开时生效”。Claude Code 保持 **CCR 隔离配置**，除非你明确希望启动的 CLI 共享现有配置状态。
 3. 需要桌面窗口并存时，把入口模式设为 `App only` 或 `CLI & APP`，然后从 CCR 打开 App。
 4. 如果同一个配置已经在运行，再次打开会激活已有窗口；需要第二个实例时，创建另一个 Agent配置。

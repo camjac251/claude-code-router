@@ -1134,6 +1134,7 @@ export const DEFAULT_TRAY_WIDGETS: TrayWidgetConfig[] = [
 ];
 
 export type ProfileClientKind = "claude-code" | "codex" | "grok" | "opencode" | "zcode";
+export type ClaudeCodeConfigMode = "inherit" | "isolated";
 export type CodexProfileConfigFormat = "legacy" | "separate_profile_files";
 export type CodexRemoteFrontendMode = "app" | "cli" | "claude-code";
 export type ProfileScope = "ccr" | "global" | "custom";
@@ -1166,6 +1167,7 @@ export type ProfileConfig = {
   appPath?: string;
   botConfigId?: string;
   botGateway?: BotGatewayRuntimeConfig;
+  claudeConfigMode?: ClaudeCodeConfigMode;
   configFile?: string;
   cliMiddleware?: boolean;
   codexCliPath?: string;
@@ -1185,6 +1187,19 @@ export type ProfileConfig = {
   smallFastModel?: string;
   surface?: ProfileSurface;
 };
+
+export function isInheritedClaudeCodeProfile(
+  profile: Pick<ProfileConfig, "agent" | "claudeConfigMode" | "scope" | "surface">
+): boolean {
+  return profile.agent === "claude-code" &&
+    profile.claudeConfigMode === "inherit" &&
+    profile.scope === "ccr" &&
+    profile.surface === "cli";
+}
+
+export function normalizeClaudeCodeConfigModeValue(value: unknown): ClaudeCodeConfigMode {
+  return value === "inherit" ? "inherit" : "isolated";
+}
 
 export type ProfileRuntimeConfig = {
   claudeCode: ClaudeCodeProfileConfig;
