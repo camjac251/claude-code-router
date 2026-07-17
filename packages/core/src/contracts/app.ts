@@ -1164,6 +1164,7 @@ export type CodexProfileConfig = {
 
 export type ProfileConfig = {
   agent: ProfileClientKind;
+  allowedModels?: string[];
   appPath?: string;
   botConfigId?: string;
   botGateway?: BotGatewayRuntimeConfig;

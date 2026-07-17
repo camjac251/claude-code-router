@@ -41,6 +41,7 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 | 入口模式 | Claude Code、Codex、OpenCode、Grok CLI | `CLI & APP` 同时显示 CLI 和 App 打开入口；`CLI only` 只生成 CLI 命令；`App only` 只显示 App 打开入口。Grok CLI 固定为 `CLI only`。 |
 | Claude 配置 | Claude Code CLI | 默认使用 **CCR 隔离配置**。只有 **仅从 CCR 打开时生效** 且为 `CLI only` 时，才可选择 **复用现有 Claude 配置**。 |
 | 模型 | 全部 | 该 Agent 打开后的默认模型，可以选择普通供应商模型或 Fusion 模型。Claude Code 留空表示保留 Claude Code 默认模型。 |
+| 允许模型 | Claude Code CLI | 可选的配置级模型列表，用于限制 Claude Code 的模型选择器。支持原生别名和已配置的 `供应商/模型` 选择器。留空时保留现有的模型可用范围。 |
 | Bot | App 入口 | 只有从 CCR 打开的 App 模式会转发 Bot 消息。CLI 当前不转发 Bot 消息。 |
 | 环境变量 | 全部 | 为该配置注入额外环境变量。Claude Code 默认带 `CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY=1`，用于启用网关模型发现。 |
 
@@ -52,10 +53,49 @@ lead: 为 Claude Code、Codex、Grok CLI、ZCode 创建可复用的启动配置�
 | --- | --- |
 | 模型覆盖 | 写入 Claude Code 使用的 `ANTHROPIC_MODEL`。留空时不覆盖 Claude Code 自己的默认模型。 |
 | 小模型 | 写入 `ANTHROPIC_SMALL_FAST_MODEL`，供 Claude Code 的轻量任务使用。留空时保留 Claude Code 默认值。 |
+| 允许模型 | 把该配置的模型选择器限制为列出的 Claude 原生模型和已配置的网关模型。 |
 | Claude 配置 | 隔离模式创建由 CCR 管理的配置；复用模式让 CLI 启动使用所选现有设置文件所在的目录。 |
 | 设置文件 | 系统默认模式使用 Claude Code 默认设置文件。CCR 隔离模式会在 CCR 配置目录下按 Agent配置 `id` 生成设置文件。复用模式只把所选文件用作目录定位，正常应用时不会读取或修改该文件。 |
 | 环境变量 | 注入启动进程。受管模式还会写入受管设置文件；复用模式不会把这些变量写入所选现有设置文件。 |
 | Bot | 只在 Claude App 入口生效，可选择已保存 Bot，并配置转发 Agent 消息或接力。 |
+
+#### 允许模型
+
+当某个仅由 CCR 启动的 Claude Code 配置只应显示指定模型时，可使用 **允许模型**。每行填写一个模型，也可以用逗号分隔。`opus`、`fable` 等 Claude Code 原生别名会保持可读；`openai/gpt-5.6-sol` 之类的网关选择器会解析为 CCR 通过模型发现公布的同一个路由 ID。未知或有歧义的选择器会导致配置应用失败，不会静默选择其他模型。
+
+非空列表会被编译为包含 `availableModels` 和 `enforceAvailableModels: true` 的策略 JSON，并通过 Claude Code 原生的 SDK 启动参数 `--managed-settings <json>` 传入。这样可以保持 `availableModels` 的精确内容，避免它与普通 `--settings` 中的数组合并，并且只在通过该 CCR 配置启动时启用限制。现有的企业受管策略仍具有更高优先级。留空则保留 Claude Code 当前的模型可用范围。
+
+配置级允许列表要求 Claude Code CLI 2.1.118 或更高版本。CCR 会在这些启动中使用原生隐藏参数 `--managed-settings`；更旧的客户端会因无法识别该参数而退出。旧版本用户应先更新 Claude Code，再启用此字段。
+
+`availableModels` 会约束可选择的主模型和显式的子 Agent 模型覆盖，但不会替代 Claude Code 单独使用的轻量模型默认值。如果不希望内部轻量调用默认使用 Haiku，还应把 **小模型**（`smallFastModel`）设为允许列表中的条目，例如 `fable`。
+
+以下配置把该启动配置限制为两个原生别名和一个已配置的网关模型：
+
+```json
+{
+  "profile": {
+    "profiles": [
+      {
+        "id": "claude-work",
+        "name": "Claude Work",
+        "agent": "claude-code",
+        "enabled": true,
+        "scope": "ccr",
+        "surface": "cli",
+        "claudeConfigMode": "inherit",
+        "model": "fable",
+        "allowedModels": [
+          "opus",
+          "fable",
+          "openai/gpt-5.6-sol"
+        ]
+      }
+    ]
+  }
+}
+```
+
+使用 **复用现有 Claude 配置** 时，CCR 只为这次配置启动注入编译后的策略 JSON，不会创建设置覆盖文件，也不会修改继承的 `~/.claude/settings.json`。调用方仍可正常使用普通 `--settings`。包装器只会拒绝显式传入的 `--managed-settings`，因为当前允许列表已经占用了这个仅限启动时使用的通道。
 
 选择 **复用现有 Claude 配置** 后，如果使用原生默认文件 `~/.claude/settings.json`，CCR 会保持 `CLAUDE_CONFIG_DIR` 未设置，使 CLI 沿用普通启动时的账号、项目、插件、Hooks、状态栏、Skills、Agents 和会话路径。自定义设置文件也必须命名为 `settings.json`，CCR 会把该文件的父目录设为 `CLAUDE_CONFIG_DIR`。网关地址、配置专属鉴权、模型和环境变量只注入此次启动，普通 `claude` 命令不受影响。CLI 本身仍共享该配置，因此它产生的修改也会保留。
 

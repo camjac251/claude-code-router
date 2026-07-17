@@ -748,6 +748,7 @@ export function createProfileDraft(agent: ProfileConfig["agent"] = "claude-code"
   const surface = agent === "zcode" ? "app" : "cli";
   return {
     agent,
+    allowedModels: "",
     appPath: "",
     ...createBotGatewayDraft(),
     claudeConfigMode: "isolated",
@@ -782,19 +783,21 @@ export function createProfileDraftFromProfile(profile: ProfileConfig, botConfigs
   const botConfigId = profile.botConfigId || matchingBotConfigId(profile.botGateway, botConfigs);
   const selectedBot = botConfigId ? botConfigs.find((config) => config.id === botConfigId) : undefined;
   if (profile.agent === "claude-code") {
+    const scope = normalizeProfileFormScope(profile.scope);
     const surface = normalizeProfileSurfaceForForm(profile.surface);
     return {
       ...createProfileDraft("claude-code", profile.name),
       ...botDraft,
+      allowedModels: scope === "ccr" && surface !== "app" ? allowedModelsDraftValue(profile.allowedModels) : "",
       appPath: profile.appPath ?? "",
       botConfigId,
       botEnabled: surface !== "cli" && Boolean(selectedBot || profile.botGateway?.enabled),
-      claudeConfigMode: normalizeProfileFormScope(profile.scope) === "ccr" && surface === "cli"
+      claudeConfigMode: scope === "ccr" && surface === "cli"
         ? normalizeClaudeCodeConfigModeValue(profile.claudeConfigMode)
         : "isolated",
       envRows: keyValueRowsFromRecord(claudeCodeProfileEnv(profile.env ?? {})),
       model: profile.model,
-      scope: normalizeProfileFormScope(profile.scope),
+      scope,
       settingsFile: profile.settingsFile ?? "~/.claude/settings.json",
       smallFastModel: profile.smallFastModel ?? "",
       surface
@@ -896,6 +899,7 @@ export function profileConfigFromDraft(
     : {};
   return normalizeProfileItem({
     agent: draft.agent,
+    allowedModels: allowedModelsFromDraft(draft.allowedModels),
     appPath: draft.appPath,
     ...botGateway,
     claudeConfigMode: draft.claudeConfigMode,
@@ -1164,6 +1168,31 @@ export function botGatewaySavedConfigLabel(config: BotGatewaySavedConfig, transl
 
 function splitDraftLines(value: string): string[] {
   return uniqueStrings(value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean));
+}
+
+function allowedModelsDraftValue(value: unknown): string {
+  return normalizeProfileAllowedModels(value)?.join("\n") ?? "";
+}
+
+function allowedModelsFromDraft(value: string): string[] | undefined {
+  return normalizeProfileAllowedModels(value.split(/[\r\n,]+/));
+}
+
+function normalizeProfileAllowedModels(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  const seen = new Set<string>();
+  const models: string[] = [];
+  for (const rawValue of value) {
+    const model = typeof rawValue === "string" ? rawValue.trim() : "";
+    const key = model.toLowerCase();
+    if (model && !seen.has(key)) {
+      seen.add(key);
+      models.push(model);
+    }
+  }
+  return models.length > 0 ? models : undefined;
 }
 
 function isNumberDraftValid(value: string, min: number, max: number): boolean {
@@ -1458,11 +1487,17 @@ export function profileSummaryItems(
 
   if (profile.agent === "claude-code") {
     const usesCcrClaudeConfig = normalizeProfileScope(profile.scope) === "ccr";
+    const allowedModels = usesCcrClaudeConfig && surface !== "app"
+      ? normalizeProfileAllowedModels(profile.allowedModels)
+      : undefined;
     const inheritsClaudeConfig = usesCcrClaudeConfig
       && surface === "cli"
       && normalizeClaudeCodeConfigModeValue(profile.claudeConfigMode) === "inherit";
     return [
       { label: t("Model"), value: modelValue },
+      ...(allowedModels
+        ? [{ label: t("Allowed models"), value: allowedModels.join(", ") }]
+        : []),
       ...(usesCcrClaudeConfig
         ? [{
             label: t("Claude configuration"),
@@ -1520,11 +1555,15 @@ export function normalizeProfileItem(profile: ProfileConfig, index: number): Pro
   const botConfigId = surface !== "cli" ? stringValue(profile.botConfigId) : "";
   if (agent === "claude-code") {
     const appPath = profile.appPath?.trim() || "";
+    const allowedModels = scope === "ccr" && surface !== "app"
+      ? normalizeProfileAllowedModels(profile.allowedModels)
+      : undefined;
     const claudeConfigMode = scope === "ccr" && surface === "cli"
       ? normalizeClaudeCodeConfigModeValue(profile.claudeConfigMode)
       : "isolated";
     return {
       agent: "claude-code",
+      ...(allowedModels ? { allowedModels } : {}),
       ...(surface !== "cli" && appPath ? { appPath } : {}),
       ...(botConfigId ? { botConfigId } : {}),
       ...(botGateway ? { botGateway } : {}),
@@ -1637,6 +1676,7 @@ export function normalizeUnknownProfileItem(value: Record<string, unknown>, inde
   }
   return normalizeProfileItem({
     agent,
+    allowedModels: normalizeProfileAllowedModels(value.allowedModels ?? value.allowed_models),
     appPath: typeof value.appPath === "string"
       ? value.appPath
       : typeof value.app_path === "string"
