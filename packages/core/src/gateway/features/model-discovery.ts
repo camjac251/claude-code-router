@@ -17,6 +17,11 @@ import { readHeader } from "@ccr/core/gateway/http/io";
 import { claudeCodeOneMillionContextSuffix } from "@ccr/core/gateway/internal/shared";
 import { parseJsonObjectSafe, serializeJsonBodyWithModel } from "@ccr/core/gateway/http/body";
 import { uniqueStrings } from "@ccr/core/gateway/internal/collections";
+import {
+  claudeCodeNativeModelFamily,
+  compileClaudeCodeAllowedModels
+} from "@ccr/core/profiles/claude-code-model-policy";
+import { profileApiKeyId } from "@ccr/core/profiles/profile-api-key";
 
 
 export function shouldServeGatewayModelsResponse(method: string, path: string): boolean {
@@ -93,7 +98,7 @@ export function prepareClaudeAppDiscoveredModelRequest(
 
 export function createGatewayModelsResponse(config: AppConfig, headers: IncomingHttpHeaders, apiKey?: ApiKeyConfig): Record<string, unknown> {
   if (isClaudeAppApiKey(apiKey) || isClaudeCodeUserAgent(headers)) {
-    return createClaudeAppGatewayModelsResponse(config);
+    return createClaudeAppGatewayModelsResponse(config, claudeCodeDiscoveryAvailableModels(config, apiKey));
   }
   return createOpenAICompatibleGatewayModelsResponse(config);
 }
@@ -119,12 +124,16 @@ function createOpenAICompatibleGatewayModelsResponse(config: AppConfig): Record<
 }
 
 
-function createClaudeAppGatewayModelsResponse(config: AppConfig): Record<string, unknown> {
+function createClaudeAppGatewayModelsResponse(
+  config: AppConfig,
+  availableModels?: readonly string[]
+): Record<string, unknown> {
   const routes = buildClaudeAppGatewayModelRoutes(
     config,
     claudeAppGatewayModelRouteOptions(config)
   );
-  const data = routes.map((route) => {
+  const visibleRoutes = filterClaudeCodeDiscoveryRoutes(routes, availableModels);
+  const data = visibleRoutes.map((route) => {
     const catalogId = stripClaudeCodeOneMillionContextSuffix(route.targetModel);
     const catalogEntry = findModelCatalogEntry(catalogId);
     const providerContextWindow = effectiveProviderModelContextWindow(config, catalogId);
@@ -151,6 +160,51 @@ function createClaudeAppGatewayModelsResponse(config: AppConfig): Record<string,
     has_more: false,
     last_id: data[data.length - 1]?.id ?? null
   };
+}
+
+
+function claudeCodeDiscoveryAvailableModels(
+  config: AppConfig,
+  apiKey: ApiKeyConfig | undefined
+): string[] | undefined {
+  if (!apiKey || !config.profile.enabled) {
+    return undefined;
+  }
+  const profile = config.profile.profiles.find((candidate) =>
+    candidate.enabled &&
+    candidate.agent === "claude-code" &&
+    candidate.scope === "ccr" &&
+    candidate.surface !== "app" &&
+    profileApiKeyId(candidate) === apiKey.id
+  );
+  return profile
+    ? compileClaudeCodeAllowedModels(config, profile.allowedModels)?.availableModels
+    : undefined;
+}
+
+
+function filterClaudeCodeDiscoveryRoutes(
+  routes: ReturnType<typeof buildClaudeAppGatewayModelRoutes>,
+  availableModels: readonly string[] | undefined
+): ReturnType<typeof buildClaudeAppGatewayModelRoutes> {
+  if (!availableModels?.length) {
+    return routes;
+  }
+  const routeIds = new Set(routes.map((route) => route.id.toLowerCase()));
+  const exactRouteIds = new Set(availableModels
+    .map(stripClaudeCodeOneMillionContextSuffix)
+    .map((model) => model.toLowerCase())
+    .filter((model) => routeIds.has(model)));
+  const nativeFamilies = new Set(availableModels
+    .map(stripClaudeCodeOneMillionContextSuffix)
+    .filter((model) => !routeIds.has(model.toLowerCase()))
+    .map(claudeCodeNativeModelFamily)
+    .filter((family): family is string => Boolean(family)));
+
+  return routes.filter((route) =>
+    exactRouteIds.has(route.id.toLowerCase()) ||
+    !nativeFamilies.has(claudeCodeNativeModelFamily(route.targetModel) ?? "")
+  );
 }
 
 

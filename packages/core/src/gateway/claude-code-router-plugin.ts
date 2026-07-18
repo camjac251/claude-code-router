@@ -12,6 +12,7 @@ import type { RouteDecision, RouteDiagnostic, RouteModelRef, RouteRequest, Route
 import { ModelRegistry, normalizeRouteSelector } from "@ccr/core/routing/model-registry";
 import { RoutePolicyEngine, type RoutePolicy } from "@ccr/core/routing/policy-engine";
 import type { RouteTraceObserver } from "@ccr/core/observability/route-trace";
+import { profileApiKeyId } from "@ccr/core/profiles/profile-api-key";
 
 export { normalizeRouteSelector } from "@ccr/core/routing/model-registry";
 
@@ -486,7 +487,7 @@ function resolveAuthenticatedProfile(
   return config.profile.profiles.find((profile) =>
     profile.enabled &&
     profile.agent === agent &&
-    profileApiKeyId(profile.id || profile.name || profile.agent) === authenticatedApiKeyId
+    profileApiKeyId(profile) === authenticatedApiKeyId
   );
 }
 
@@ -496,11 +497,6 @@ function resolveBuiltInAgentRouteTarget(
   agent: RouterBuiltInAgentRuleId
 ): string | undefined {
   return normalizeRouteSelector(resolveBuiltInAgentProfile(request, config, agent)?.model);
-}
-
-function profileApiKeyId(value: string): string {
-  const profileId = value.trim().replace(/[^a-zA-Z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "");
-  return `profile:${profileId || "profile"}`;
 }
 
 function builtInAgentUserAgentNeedle(agent: RouterBuiltInAgentRuleId): string {
