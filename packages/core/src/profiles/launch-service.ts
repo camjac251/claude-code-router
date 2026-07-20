@@ -439,6 +439,8 @@ type ExistingGatewayHttpProbe = {
   status?: number;
 };
 
+const existingGatewayFetchAttempts = 3;
+
 async function probeExistingProfileGateway(
   config: AppConfig,
   profile: ReturnType<typeof findProfileForOpen>,
@@ -494,22 +496,26 @@ async function fetchExistingGateway(
   pathname: string,
   init: RequestInit = {}
 ): Promise<ExistingGatewayHttpProbe> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 1200);
-  try {
-    const response = await fetch(new URL(pathname, endpoint).toString(), {
-      ...init,
-      signal: controller.signal
-    });
-    return {
-      payload: await readResponseJson(response),
-      status: response.status
-    };
-  } catch (error) {
-    return { reason: formatError(error) };
-  } finally {
-    clearTimeout(timeout);
+  let reason: string | undefined;
+  for (let attempt = 0; attempt < existingGatewayFetchAttempts; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1200);
+    try {
+      const response = await fetch(new URL(pathname, endpoint).toString(), {
+        ...init,
+        signal: controller.signal
+      });
+      return {
+        payload: await readResponseJson(response),
+        status: response.status
+      };
+    } catch (error) {
+      reason = formatError(error);
+    } finally {
+      clearTimeout(timeout);
+    }
   }
+  return { reason };
 }
 
 async function readResponseJson(response: Response): Promise<unknown> {

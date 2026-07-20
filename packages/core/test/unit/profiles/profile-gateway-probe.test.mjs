@@ -99,6 +99,45 @@ test("existing profile gateway falls back to the root identity response", async 
   }
 });
 
+test("existing profile gateway retries a transient transport failure", async () => {
+  const previousFetch = globalThis.fetch;
+  const paths = [];
+  let modelAttempts = 0;
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    paths.push(url.pathname);
+    if (url.pathname === "/health") {
+      return Response.json({
+        core: "http://127.0.0.1:3467",
+        status: "running",
+        timestamp: "2026-01-01T00:00:00.000Z"
+      });
+    }
+    if (url.pathname === "/v1/models") {
+      modelAttempts += 1;
+      if (modelAttempts === 1) {
+        throw new TypeError("fetch failed", { cause: { code: "ECONNRESET" } });
+      }
+      return Response.json({ data: [], object: "list" });
+    }
+    throw new Error(`Unexpected gateway probe: ${url.pathname}`);
+  };
+
+  try {
+    const { config, profile } = claudeProfileConfig();
+    const result = await ensureProfileGateway(config, profile, "Local subscription router", {
+      reuseExisting: true,
+      startIfMissing: false
+    });
+
+    assert.equal(result.APIKEY, "profile-token");
+    assert.equal(modelAttempts, 2);
+    assert.deepEqual(paths, ["/health", "/v1/models", "/v1/models"]);
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test("unavailable profile gateway reports the probe failure reason", async () => {
   const previousFetch = globalThis.fetch;
   const paths = [];
@@ -127,7 +166,7 @@ test("unavailable profile gateway reports the probe failure reason", async () =>
         return true;
       }
     );
-    assert.deepEqual(paths, ["/health", "/"]);
+    assert.deepEqual(paths, ["/health", "/health", "/health", "/", "/", "/"]);
   } finally {
     globalThis.fetch = previousFetch;
   }
