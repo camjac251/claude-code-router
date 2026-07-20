@@ -398,7 +398,8 @@ async function ensureGatewayConfigRunning(
     }
     if (existingGateway.state === "unavailable") {
       if (!startIfMissing) {
-        throw new ProfileGatewayUnavailableError(`CCR gateway is not running at ${profileGatewayEndpoint(config)}. Start CCR Desktop or run ccr start before opening ${appName}.`);
+        const reason = existingGateway.reason ? `: ${existingGateway.reason}` : "";
+        throw new ProfileGatewayUnavailableError(`CCR gateway is not running at ${profileGatewayEndpoint(config)}${reason}. Start CCR Desktop or run ccr start before opening ${appName}.`);
       }
     } else {
       throw new Error(existingGatewayConflictMessage(existingGateway, appName));
@@ -444,18 +445,18 @@ async function probeExistingProfileGateway(
   candidateConfig: AppConfig = config
 ): Promise<ExistingProfileGatewayProbe> {
   const endpoint = profileGatewayEndpoint(config);
-  const root = await fetchExistingGateway(endpoint, "/");
-  if (root.status === undefined) {
-    return { endpoint, reason: root.reason, state: "unavailable" };
-  }
-
-  let ccrGateway = isCcrGatewayRoot(root.payload);
+  const health = await fetchExistingGateway(endpoint, "/health");
+  let ccrGateway = isCcrGatewayHealth(health.payload);
+  let root: ExistingGatewayHttpProbe | undefined;
   if (!ccrGateway) {
-    const health = await fetchExistingGateway(endpoint, "/health");
-    ccrGateway = isCcrGatewayHealth(health.payload);
+    root = await fetchExistingGateway(endpoint, "/");
+    ccrGateway = isCcrGatewayRoot(root.payload);
   }
   if (!ccrGateway) {
-    return { endpoint, status: root.status, state: "not-ccr" };
+    if (health.status === undefined && root?.status === undefined) {
+      return { endpoint, reason: health.reason || root?.reason, state: "unavailable" };
+    }
+    return { endpoint, status: health.status ?? root?.status, state: "not-ccr" };
   }
 
   let lastUnauthorized: ExistingGatewayHttpProbe | undefined;
